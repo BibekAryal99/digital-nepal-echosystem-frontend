@@ -1,9 +1,7 @@
-export type AuditLog = {
+export interface AuditLog {
   id: string;
-  event_type: string;
-  citizen_id: string;
-  acted_by_role: string;
-  jurisdiction: string;
+  action: string;
+  performedBy: string;
   timestamp: string;
-  ip_hash: string;
-};
+  module: string;
+}

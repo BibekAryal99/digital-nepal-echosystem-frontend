@@ -1,24 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+
 import citizens from "../../../../data/citizens.json";
 import editApprovals from "../../../../data/edit-approvals.json";
 import users from "../../../../data/users.json";
 import wards from "../../../../data/wards.json";
-
-type Approval = {
-  id: string;
-  citizen_id: string;
-  submitter_id: string;
-  status: string;
-  old_value_json: Record<string, unknown>;
-  new_value_json: Record<string, unknown>;
-  submitted_at: string;
-};
-
-const LOCAL_STORAGE_KEY = "edit-approvals";
-const initialApprovals = editApprovals as unknown as Approval[];
 
 function getDaysPending(submittedAt: string) {
   const submittedDate = new Date(submittedAt);
@@ -77,6 +64,14 @@ function getStatusBadgeClass(status: string) {
     return "bg-orange-100 text-orange-700";
   }
 
+  if (status === "APPROVED") {
+    return "bg-green-100 text-green-700";
+  }
+
+  if (status === "REJECTED") {
+    return "bg-red-100 text-red-700";
+  }
+
   return "bg-gray-100 text-gray-700";
 }
 
@@ -85,32 +80,15 @@ export default function MunicipalityApprovalsPage() {
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [selectedField, setSelectedField] = useState("ALL");
 
-  const [approvals] = useState<Approval[]>(() => {
-    if (typeof window === "undefined") {
-      return initialApprovals;
-    }
-
-    const storedApprovals = localStorage.getItem(LOCAL_STORAGE_KEY);
-
-    if (!storedApprovals) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialApprovals));
-      return initialApprovals;
-    }
-
-    try {
-      return JSON.parse(storedApprovals) as Approval[];
-    } catch {
-      return initialApprovals;
-    }
-  });
-
   const approvalRows = useMemo(() => {
-    return approvals.map((approval) => {
+    return editApprovals.map((approval) => {
       const citizen = citizens.find(
         (citizen) => citizen.id === approval.citizen_id,
       );
 
-      const submitter = users.find((user) => user.id === approval.submitter_id);
+      const submitter = users.find(
+        (user) => user.id === approval.submitter_id,
+      );
 
       const ward = wards.find((ward) => ward.id === citizen?.ward_id);
 
@@ -130,33 +108,27 @@ export default function MunicipalityApprovalsPage() {
       return {
         id: approval.id,
         citizenName: citizen?.name_en ?? "Unknown Citizen",
+        citizenId: approval.citizen_id,
         wardId: citizen?.ward_id ?? "UNKNOWN",
         wardName: ward?.name_en ?? "Unknown Ward",
+        wardNo: ward?.ward_no ?? null,
         changedFields,
         submittedBy: submitter?.full_name ?? "Unknown User",
         submittedAt: approval.submitted_at,
         daysPending,
+        businessDaysPending,
         status: approval.status,
         isCaoReviewDue: !isFinalStatus && businessDaysPending > 5,
       };
     });
-  }, [approvals]);
-
-  const pendingApprovalRows = useMemo(() => {
-    return approvalRows.filter(
-      (approval) =>
-        approval.status !== "APPROVED" && approval.status !== "REJECTED",
-    );
-  }, [approvalRows]);
+  }, []);
 
   const fieldOptions = useMemo(() => {
-    const fields = pendingApprovalRows.flatMap(
-      (approval) => approval.changedFields,
-    );
+    const fields = approvalRows.flatMap((approval) => approval.changedFields);
     return Array.from(new Set(fields));
-  }, [pendingApprovalRows]);
+  }, [approvalRows]);
 
-  const filteredApprovals = pendingApprovalRows.filter((approval) => {
+  const filteredApprovals = approvalRows.filter((approval) => {
     const matchesWard =
       selectedWard === "ALL" || approval.wardId === selectedWard;
 
@@ -164,7 +136,8 @@ export default function MunicipalityApprovalsPage() {
       selectedStatus === "ALL" || approval.status === selectedStatus;
 
     const matchesField =
-      selectedField === "ALL" || approval.changedFields.includes(selectedField);
+      selectedField === "ALL" ||
+      approval.changedFields.includes(selectedField);
 
     return matchesWard && matchesStatus && matchesField;
   });
@@ -172,9 +145,9 @@ export default function MunicipalityApprovalsPage() {
   return (
     <main className="p-6">
       <div>
-        <h1 className="text-2xl font-semibold text-black">Approval Queue</h1>
+        <h1 className="text-2xl font-semibold text-white">Approval Queue</h1>
 
-        <p className="mt-1 text-sm text-black">
+        <p className="mt-1 text-sm text-white">
           Review citizen data edit requests submitted from ward offices.
         </p>
       </div>
@@ -214,6 +187,8 @@ export default function MunicipalityApprovalsPage() {
               <option value="ALL">All Statuses</option>
               <option value="PENDING_APPROVAL">Pending</option>
               <option value="CAO_REVIEW">CAO Review</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
             </select>
           </div>
 
@@ -246,8 +221,8 @@ export default function MunicipalityApprovalsPage() {
           </h2>
 
           <p className="text-sm text-gray-600">
-            Showing {filteredApprovals.length} of {pendingApprovalRows.length}{" "}
-            pending approval requests.
+            Showing {filteredApprovals.length} of {approvalRows.length} approval
+            requests.
           </p>
         </div>
 
@@ -262,7 +237,6 @@ export default function MunicipalityApprovalsPage() {
                 <th className="px-4 py-3">Submitted At</th>
                 <th className="px-4 py-3">Days Pending</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Action</th>
               </tr>
             </thead>
 
@@ -315,21 +289,13 @@ export default function MunicipalityApprovalsPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/municipality/approvals/${approval.id}`}
-                      className="font-medium text-blue-600 hover:underline"
-                    >
-                      View
-                    </Link>
-                  </td>
                 </tr>
               ))}
 
               {filteredApprovals.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
                     No approval requests match the selected filters.
